@@ -18,13 +18,48 @@ public class CameraView: UIView {
     var preview: AVCaptureVideoPreviewLayer!
     
     let focusView = CropOverlay(frame: CGRect(x: 0, y: 0, width: 80, height: 80))
-    
+    let cameraQueue = dispatch_queue_create("com.zero.ALCameraViewController.Queue",DISPATCH_QUEUE_CONCURRENT)
     public var currentPosition = CameraGlobals.shared.defaultCameraPosition
     
     public func startSession() {
-        dispatch_async(dispatch_get_main_queue()) { 
-            self.createSession()
-            self.session?.startRunning()
+        
+        session = AVCaptureSession()
+        session.sessionPreset = AVCaptureSessionPresetPhoto
+        
+        device = cameraWithPosition(currentPosition)
+        
+        if let device = device where device.hasFlash {
+            do {
+                try device.lockForConfiguration()
+                    device.flashMode = .Auto
+                    device.unlockForConfiguration()
+            }
+            catch _ {}
+        }
+        
+        let outputSettings = [AVVideoCodecKey: AVVideoCodecJPEG]
+        do {
+            input = try AVCaptureDeviceInput(device: device)
+            } catch let error as NSError {
+                input = nil
+                    print("Error: \(error.localizedDescription)")
+                return
+                }
+
+        if session.canAddInput(input) {
+            session.addInput(input)
+        }
+        
+        imageOutput = AVCaptureStillImageOutput()
+        imageOutput.outputSettings = outputSettings
+        
+        session.addOutput(imageOutput)
+        
+        dispatch_async(cameraQueue) {
+            self.session.startRunning()
+            dispatch_async(dispatch_get_main_queue(), { 
+                self.createPreview()
+            })
         }
     }
     
@@ -100,42 +135,7 @@ public class CameraView: UIView {
         })
     }
     
-    private func createSession() {
-        session = AVCaptureSession()
-        session.sessionPreset = AVCaptureSessionPresetPhoto
-        dispatch_async(dispatch_get_main_queue()) {
-            self.createPreview()
-        }
-    }
-    
     private func createPreview() {
-        device = cameraWithPosition(currentPosition)
-        if let device = device where device.hasFlash {
-            do {
-                try device.lockForConfiguration()
-                device.flashMode = .Auto
-                device.unlockForConfiguration()
-            } catch _ {}
-        }
-        
-        let outputSettings = [AVVideoCodecKey: AVVideoCodecJPEG]
-        
-        do {
-            input = try AVCaptureDeviceInput(device: device)
-        } catch let error as NSError {
-            input = nil
-            print("Error: \(error.localizedDescription)")
-            return
-        }
-        
-        if session.canAddInput(input) {
-            session.addInput(input)
-        }
-        
-        imageOutput = AVCaptureStillImageOutput()
-        imageOutput.outputSettings = outputSettings
-        
-        session.addOutput(imageOutput)
         
         preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = AVLayerVideoGravityResizeAspectFill
