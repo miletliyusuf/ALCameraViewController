@@ -64,7 +64,7 @@ public class CameraView: UIView {
     }
     
     public func stopSession() {
-        dispatch_async(dispatch_get_main_queue()) {
+        dispatch_async(cameraQueue) {
             self.session?.stopRunning()
             self.preview?.removeFromSuperlayer()
             
@@ -153,8 +153,7 @@ public class CameraView: UIView {
     
     public func capturePhoto(completion: CameraShotCompletion) {
         userInteractionEnabled = false
-        dispatch_async(dispatch_get_main_queue()) {
-            
+        dispatch_async(cameraQueue) {
             var i = 0
             
             if let device = self.device {
