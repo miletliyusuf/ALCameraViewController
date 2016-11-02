@@ -5,7 +5,6 @@
 //  Created by Alex Littlejohn on 2015/06/17.
 //  Copyright (c) 2015 zero. All rights reserved.
 //
-
 import UIKit
 import AVFoundation
 
@@ -17,16 +16,49 @@ public class CameraView: UIView {
     var imageOutput: AVCaptureStillImageOutput!
     var preview: AVCaptureVideoPreviewLayer!
     
-    let cameraQueue = dispatch_queue_create("com.zero.ALCameraViewController.Queue", DISPATCH_QUEUE_SERIAL)
-    
     let focusView = CropOverlay(frame: CGRect(x: 0, y: 0, width: 80, height: 80))
-    
+    let cameraQueue = dispatch_queue_create("com.zero.ALCameraViewController.Queue",DISPATCH_QUEUE_CONCURRENT)
     public var currentPosition = CameraGlobals.shared.defaultCameraPosition
     
     public func startSession() {
+        
+        session = AVCaptureSession()
+        session.sessionPreset = AVCaptureSessionPresetPhoto
+        
+        device = cameraWithPosition(currentPosition)
+        
+        if let device = device where device.hasFlash {
+            do {
+                try device.lockForConfiguration()
+                device.flashMode = .Auto
+                device.unlockForConfiguration()
+            }
+            catch _ {}
+        }
+        
+        let outputSettings = [AVVideoCodecKey: AVVideoCodecJPEG]
+        do {
+            input = try AVCaptureDeviceInput(device: device)
+        } catch let error as NSError {
+            input = nil
+            print("Error: \(error.localizedDescription)")
+            return
+        }
+        
+        if session.canAddInput(input) {
+            session.addInput(input)
+        }
+        
+        imageOutput = AVCaptureStillImageOutput()
+        imageOutput.outputSettings = outputSettings
+        
+        session.addOutput(imageOutput)
+        
         dispatch_async(cameraQueue) {
-            self.createSession()
-            self.session?.startRunning()
+            self.session.startRunning()
+            dispatch_async(dispatch_get_main_queue(), {
+                self.createPreview()
+            })
         }
     }
     
@@ -102,47 +134,12 @@ public class CameraView: UIView {
         })
     }
     
-    private func createSession() {
-        session = AVCaptureSession()
-        session.sessionPreset = AVCaptureSessionPresetPhoto
-        dispatch_async(dispatch_get_main_queue()) {
-            self.createPreview()
-        }
-    }
-    
     private func createPreview() {
-        device = cameraWithPosition(currentPosition)
-        if let device = device where device.hasFlash {
-            do {
-                try device.lockForConfiguration()
-                device.flashMode = .Auto
-                device.unlockForConfiguration()
-            } catch _ {}
-        }
-        
-        let outputSettings = [AVVideoCodecKey: AVVideoCodecJPEG]
-        
-        do {
-            input = try AVCaptureDeviceInput(device: device)
-        } catch let error as NSError {
-            input = nil
-            print("Error: \(error.localizedDescription)")
-            return
-        }
-        
-        if session.canAddInput(input) {
-            session.addInput(input)
-        }
-        
-        imageOutput = AVCaptureStillImageOutput()
-        imageOutput.outputSettings = outputSettings
-        
-        session.addOutput(imageOutput)
         
         preview = AVCaptureVideoPreviewLayer(session: session)
         preview.videoGravity = AVLayerVideoGravityResizeAspectFill
         preview.frame = bounds
-
+        
         layer.addSublayer(preview)
     }
     
@@ -156,7 +153,6 @@ public class CameraView: UIView {
     public func capturePhoto(completion: CameraShotCompletion) {
         userInteractionEnabled = false
         dispatch_async(cameraQueue) {
-            
             var i = 0
             
             if let device = self.device {
@@ -213,7 +209,7 @@ public class CameraView: UIView {
             device.unlockForConfiguration()
         } catch _ { }
     }
-
+    
     public func swapCameraInput() {
         
         guard let session = session, input = input else {
@@ -240,26 +236,26 @@ public class CameraView: UIView {
         session.addInput(i)
         session.commitConfiguration()
     }
-  
+    
     public func rotatePreview() {
-      
+        
         guard preview != nil else {
             return
         }
         switch UIApplication.sharedApplication().statusBarOrientation {
-            case .Portrait:
-              preview?.connection.videoOrientation = AVCaptureVideoOrientation.Portrait
-              break
-            case .PortraitUpsideDown:
-              preview?.connection.videoOrientation = AVCaptureVideoOrientation.PortraitUpsideDown
-              break
-            case .LandscapeRight:
-              preview?.connection.videoOrientation = AVCaptureVideoOrientation.LandscapeRight
-              break
-            case .LandscapeLeft:
-              preview?.connection.videoOrientation = AVCaptureVideoOrientation.LandscapeLeft
-              break
-            default: break
+        case .Portrait:
+            preview?.connection.videoOrientation = AVCaptureVideoOrientation.Portrait
+            break
+        case .PortraitUpsideDown:
+            preview?.connection.videoOrientation = AVCaptureVideoOrientation.PortraitUpsideDown
+            break
+        case .LandscapeRight:
+            preview?.connection.videoOrientation = AVCaptureVideoOrientation.LandscapeRight
+            break
+        case .LandscapeLeft:
+            preview?.connection.videoOrientation = AVCaptureVideoOrientation.LandscapeLeft
+            break
+        default: break
         }
     }
     
